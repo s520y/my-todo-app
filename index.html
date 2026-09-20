@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Todo</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --border: #e2e5ec;
+    --text: #1f2430;
+    --muted: #8a90a2;
+    --accent: #4f6df5;
+    --accent-hover: #3d59e0;
+    --done: #b7bccb;
+    --danger: #e5566d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px 16px;
+  }
+  .app {
+    width: 100%;
+    max-width: 480px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 20px;
+  }
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  #new-task {
+    flex: 1;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 15px;
+    background: var(--card);
+    color: var(--text);
+    outline: none;
+  }
+  #new-task:focus {
+    border-color: var(--accent);
+  }
+  button {
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+  }
+  #add-btn {
+    padding: 12px 18px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  #add-btn:hover { background: var(--accent-hover); }
+
+  ul#task-list {
+    list-style: none;
+    margin: 0 0 20px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .task {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .task input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .task .label {
+    flex: 1;
+    font-size: 15px;
+    word-break: break-word;
+  }
+  .task.done .label {
+    color: var(--done);
+    text-decoration: line-through;
+  }
+  .task .delete-btn {
+    background: transparent;
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+  .task .delete-btn:hover {
+    color: var(--danger);
+    background: #fdeef0;
+  }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 24px 0;
+  }
+
+  .summary-section {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  .summary-row {
+    display: flex;
+    gap: 8px;
+  }
+  #summarize-btn {
+    flex: 1;
+    padding: 12px;
+    background: var(--card);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  #summarize-btn:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+  #summarize-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+    background: var(--card);
+    color: var(--accent);
+  }
+  #reset-key-btn {
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  #reset-key-btn:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+  #summary-output {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: #eef1fe;
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--text);
+    display: none;
+  }
+  #summary-output.visible { display: block; }
+  #summary-output.error {
+    background: #fdeef0;
+    color: #a8324a;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Todo</h1>
+
+  <div class="add-row">
+    <input id="new-task" type="text" placeholder="Add a task..." autocomplete="off">
+    <button id="add-btn">Add</button>
+  </div>
+
+  <ul id="task-list"></ul>
+
+  <div class="summary-section">
+    <div class="summary-row">
+      <button id="summarize-btn">Summarize my day</button>
+      <button id="reset-key-btn" title="Clear saved API key">Reset key</button>
+    </div>
+    <div id="summary-output"></div>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'todo.tasks';
+  const API_KEY_STORAGE = 'todo.anthropic_api_key';
+  const CLAUDE_MODEL = 'claude-sonnet-5';
+
+  const taskList = document.getElementById('task-list');
+  const newTaskInput = document.getElementById('new-task');
+  const addBtn = document.getElementById('add-btn');
+  const summarizeBtn = document.getElementById('summarize-btn');
+  const resetKeyBtn = document.getElementById('reset-key-btn');
+  const summaryOutput = document.getElementById('summary-output');
+
+  let tasks = loadTasks();
+
+  function loadTasks() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveTasks() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  }
+
+  function render() {
+    taskList.innerHTML = '';
+
+    if (tasks.length === 0) {
+      const empty = document.createElement('li');
+      empty.className = 'empty';
+      empty.textContent = 'No tasks yet. Add one above.';
+      taskList.appendChild(empty);
+      return;
+    }
+
+    for (const task of tasks) {
+      const li = document.createElement('li');
+      li.className = 'task' + (task.done ? ' done' : '');
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = task.done;
+      checkbox.addEventListener('change', () => toggleTask(task.id));
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = task.text;
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.textContent = '×';
+      deleteBtn.setAttribute('aria-label', 'Delete task');
+      deleteBtn.addEventListener('click', () => deleteTask(task.id));
+
+      li.appendChild(checkbox);
+      li.appendChild(label);
+      li.appendChild(deleteBtn);
+      taskList.appendChild(li);
+    }
+  }
+
+  function addTask(text) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    tasks.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), text: trimmed, done: false });
+    saveTasks();
+    render();
+  }
+
+  function toggleTask(id) {
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      task.done = !task.done;
+      saveTasks();
+      render();
+    }
+  }
+
+  function deleteTask(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    saveTasks();
+    render();
+  }
+
+  addBtn.addEventListener('click', () => {
+    addTask(newTaskInput.value);
+    newTaskInput.value = '';
+    newTaskInput.focus();
+  });
+
+  newTaskInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      addTask(newTaskInput.value);
+      newTaskInput.value = '';
+    }
+  });
+
+  function getApiKey() {
+    let key = localStorage.getItem(API_KEY_STORAGE);
+    if (!key) {
+      key = window.prompt('Enter your Anthropic API key:\n(saved locally in this browser only)');
+      if (key) {
+        key = key.trim();
+        localStorage.setItem(API_KEY_STORAGE, key);
+      }
+    }
+    return key;
+  }
+
+  function showSummary(text, isError) {
+    summaryOutput.textContent = text;
+    summaryOutput.classList.add('visible');
+    summaryOutput.classList.toggle('error', !!isError);
+  }
+
+  async function summarizeDay() {
+    if (tasks.length === 0) {
+      showSummary('Add some tasks first, then try again.', true);
+      return;
+    }
+
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      showSummary('An API key is required to generate a summary.', true);
+      return;
+    }
+
+    const taskText = tasks
+      .map(t => `- [${t.done ? 'x' : ' '}] ${t.text}`)
+      .join('\n');
+
+    const prompt = `Here is my todo list for today:\n${taskText}\n\nIn exactly one sentence, summarize what my day looks like.`;
+
+    summarizeBtn.disabled = true;
+    summarizeBtn.textContent = 'Summarizing...';
+    showSummary('', false);
+    summaryOutput.classList.remove('visible');
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: CLAUDE_MODEL,
+          max_tokens: 100,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        const message = errBody && errBody.error && errBody.error.message
+          ? errBody.error.message
+          : `Request failed with status ${res.status}`;
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem(API_KEY_STORAGE);
+        }
+        throw new Error(message);
+      }
+
+      const data = await res.json();
+      const summary = data?.content?.[0]?.text?.trim();
+
+      if (!summary) {
+        throw new Error('No summary returned.');
+      }
+
+      showSummary(summary, false);
+    } catch (err) {
+      showSummary('Could not get a summary: ' + err.message, true);
+    } finally {
+      summarizeBtn.disabled = false;
+      summarizeBtn.textContent = 'Summarize my day';
+    }
+  }
+
+  summarizeBtn.addEventListener('click', summarizeDay);
+
+  resetKeyBtn.addEventListener('click', () => {
+    localStorage.removeItem(API_KEY_STORAGE);
+    summaryOutput.classList.remove('visible', 'error');
+    showSummary('API key cleared. You\'ll be asked for it again next time.', false);
+  });
+
+  render();
+</script>
+</body>
+</html>
